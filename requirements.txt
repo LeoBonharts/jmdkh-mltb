@@ -27,3 +27,5 @@ tenacity
 tgCrypto
 xattr
 yt-dlp
+speedtest
+speedtest-cli
