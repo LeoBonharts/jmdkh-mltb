@@ -1,4 +1,4 @@
-FROM arakurumi/mltb:heroku
+FROM anshumanpm2006/mltb:heroku
 
 
 WORKDIR /usr/src/app
