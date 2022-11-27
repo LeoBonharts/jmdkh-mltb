@@ -6,7 +6,7 @@ from pyrogram.errors import FloodWait, RPCError
 from PIL import Image
 from threading import RLock
 
-from bot import config_dict, user_data, app, GLOBAL_EXTENSION_FILTER
+from bot import config_dict, user_data, app, GLOBAL_EXTENSION_FILTER, IS_USER_SESSION
 from bot.helper.ext_utils.fs_utils import take_ss, get_media_info, get_media_streams, clean_unwanted
 from bot.helper.ext_utils.bot_utils import get_readable_file_size
 
@@ -152,6 +152,17 @@ class TgUploader:
                                                                  disable_notification=True,
                                                                  reply_markup=self.__button,
                                                                  progress=self.__upload_progress)
+            if self.__listener.dmMessage and self.__sent_DMmsg:
+                if IS_USER_SESSION:
+                    self.__sent_DMmsg = self.__listener.bot.copy_message(
+                    chat_id=self.__listener.message.from_user.id,
+                    from_chat_id=self.__sent_msg.chat.id,
+                    message_id=self.__sent_msg.id,
+                    reply_to_message_id=self.__sent_DMmsg['message_id'])
+                else:
+                    self.__sent_DMmsg = self.__sent_msg.copy(
+                        chat_id=self.__sent_DMmsg.chat.id,
+                        reply_to_message_id=self.__sent_DMmsg.id)
         except FloodWait as f:
             LOGGER.warning(str(f))
             sleep(f.value)
@@ -192,18 +203,21 @@ class TgUploader:
             self.__thumb = None
 
     def __msg_to_reply(self):
-        DUMP_CHAT = config_dict['DUMP_CHAT']
-        if DUMP_CHAT:
-            if self.__listener.isPrivate:
-                msg = self.__listener.message.text
-            else:
-                msg = self.__listener.message.link
+        if DUMP_CHAT:= config_dict['DUMP_CHAT']:
+            msg = self.__listener.message.text if self.__listener.isPrivate else self.__listener.message.link
             self.__sent_msg = app.send_message(DUMP_CHAT, msg, disable_web_page_preview=True)
-            self.__button = InlineKeyboardMarkup([[InlineKeyboardButton(text='Save Message', callback_data="save")]])
+            if self.__listener.dmMessage and IS_USER_SESSION:
+                self.__sent_DMmsg = {'message_id' : self.__listener.dmMessage.message_id}
+            elif self.__listener.dmMessage:
+                self.__sent_DMmsg = app.get_messages(self.__listener.message.from_user.id, self.__listener.dmMessage.message_id)
+        elif self.__listener.dmMessage and not IS_USER_SESSION:
+            self.__sent_msg = app.get_messages(self.__listener.message.from_user.id, self.__listener.dmMessage.message_id)
+            self.__sent_DMmsg = None
         else:
-            if not self.__listener.isPrivate:
-                self.__button = InlineKeyboardMarkup([[InlineKeyboardButton(text='Save Message', callback_data="save")]])
             self.__sent_msg = app.get_messages(self.__listener.message.chat.id, self.__listener.uid)
+            self.__sent_DMmsg = None
+        if self.__listener.message.chat.type != 'private' and not self.__listener.dmMessage:
+            self.__button = InlineKeyboardMarkup([[InlineKeyboardButton(text='Save Message', callback_data="save")]])
 
     @property
     def speed(self):
